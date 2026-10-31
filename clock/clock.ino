@@ -17,16 +17,25 @@ const int tempIndPin = 15;
 const int wetIndPin = 16;
 const int photoresPin = A0;
 
-int inputPhotoRes() {
-  int photoValue = analogRead(photoresPin);
-  return photoValue;
-}
 
 void controlBacklight(int photoValue) {
-  int bright = map(photoValue, 0, 1023, 200, 1023);
-  analogWrite(photoValue, bright);
+  int bright = map(photoValue, 650, 1023, 255, 20);
+  bright = constrain(bright, 20, 255);
+  // Serial.print(photoValue);
+  // Serial.print(": ");
+  // Serial.println(bright);
+  analogWrite(backlightPin, bright);
 }
 
+float outInfoTemp() {
+  float temp = bme.readTemperature();
+  return temp;
+}
+
+float outInfoWet() {
+  float wet = bme.readHumidity();
+  return wet;
+}
 
 
 void setup() {
@@ -40,5 +49,7 @@ void setup() {
 }
 
 void loop() {
-
+  int photo = analogRead(photoresPin);
+  controlBacklight(photo);
+  delay(1000);
 }
