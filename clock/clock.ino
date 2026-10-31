@@ -11,10 +11,10 @@ GyverDS3231 rtc;
 const int backlightPin = 2; 
 const int menuButtonPin = 14;
 const int hoursButtonInt = 13;
-const int minutesButtonPin = 16;
+const int minutesButtonPin = 12;
 const int powerIndPin = 0;
 const int tempIndPin = 15;
-const int wetIndPin = 12;
+const int wetIndPin = 16;
 const int photoresPin = A0;
 
 
@@ -22,7 +22,7 @@ void controlBacklight(int photoValue) {
   int bright = map(photoValue, 650, 1023, 255, 20);
   bright = constrain(bright, 20, 255);
   analogWrite(backlightPin, bright);
-  Serial.print(bright);
+  // Serial.print(bright);
 }
 
 int outInfoTemp() {
@@ -43,7 +43,7 @@ void setup() {
   bme.begin();  
   lcd.init();
   lcd.clear();
-  lcd.noBacklight();
+  lcd.backlight();
 }
 
 void display(int temp, int baro, int wet, int height) {
