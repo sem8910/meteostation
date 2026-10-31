@@ -21,9 +21,6 @@ const int photoresPin = A0;
 void controlBacklight(int photoValue) {
   int bright = map(photoValue, 650, 1023, 255, 20);
   bright = constrain(bright, 20, 255);
-  // Serial.print(photoValue);
-  // Serial.print(": ");
-  // Serial.println(bright);
   analogWrite(backlightPin, bright);
 }
 
