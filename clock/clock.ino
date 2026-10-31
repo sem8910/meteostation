@@ -14,7 +14,7 @@ const int hoursButtonInt = 13;
 const int minutesButtonPin = 12;
 const int powerIndPin = 0;
 const int tempIndPin = 15;
-const int wetIndPin = 16;
+const int baroIndPin = 16;
 const int photoresPin = A0;
 
 
@@ -23,16 +23,6 @@ void controlBacklight(int photoValue) {
   bright = constrain(bright, 20, 255);
   analogWrite(backlightPin, bright);
   // Serial.print(bright);
-}
-
-int outInfoTemp() {
-  int temp = bme.readTemperature();
-  return temp;
-}
-
-float outInfoWet() {
-  float wet = bme.readHumidity();
-  return wet;
 }
 
 
@@ -46,7 +36,7 @@ void setup() {
   lcd.backlight();
 }
 
-void display(int temp, int baro, int wet, int height) {
+void display(int temp, int baro, int wet) {
   lcd.setCursor(0, 0);
   for (int i = 0; i < 16; i++) {
     lcd.print(" ");
@@ -59,20 +49,19 @@ void display(int temp, int baro, int wet, int height) {
   lcd.print("t: ");
   lcd.print(String(temp));
   lcd.write(0xDF);
-  lcd.print("C    ");
-  lcd.print("h: ");
-  lcd.print(String(wet));
-  lcd.print("%  ");
-  lcd.setCursor(0, 1);
+  lcd.print("C ");
   lcd.print("P: ");
   lcd.print(String(baro));
-  lcd.print("mm  ");
+  lcd.print("mm");
 }
 
 void loop() {
   int photo = analogRead(photoresPin);
   controlBacklight(photo);
-  // display(3, 6, 9, 12);
-  delay(1000); 
+  int temp = bme.readTemperature();
+  int baro = bme.readPressure() * 0.00750062;
+  int wet = bme.readHumidity();
+  display(temp, baro, wet);
+  delay(5000);
 }
 
