@@ -10,7 +10,7 @@ GyverDS3231 rtc;
 
 const int backlightPin = 2; 
 const int menuButtonPin = 14;
-const int hoursButtonInt = 13;
+const int hoursButtonPin = 13;
 const int minutesButtonPin = 12;
 const int powerIndPin = 0;
 const int tempIndPin = 15;
@@ -25,18 +25,7 @@ void controlBacklight(int photoValue) {
   // Serial.print(bright);
 }
 
-
-void setup() {
-  Wire.begin();
-  pinMode(backlightPin, OUTPUT);
-  Serial.begin(9600);                         
-  bme.begin();  
-  lcd.init();
-  lcd.clear();
-  lcd.backlight();
-}
-
-void display(int temp, int baro, int wet) {
+void display(int temp, int baro) {
   lcd.setCursor(0, 0);
   for (int i = 0; i < 16; i++) {
     lcd.print(" ");
@@ -55,13 +44,30 @@ void display(int temp, int baro, int wet) {
   lcd.print("mm");
 }
 
+void setup() {
+  Wire.begin();
+  pinMode(backlightPin, OUTPUT);
+  pinMode(menuButtonPin, INPUT_PULLUP);
+  pinMode(hoursButtonPin, INPUT_PULLUP);
+  pinMode(minutesButtonPin, INPUT_PULLUP);
+  pinMode(powerIndPin, OUTPUT);
+  pinMode(tempIndPin, OUTPUT);
+  pinMode(baroIndPin, OUTPUT);
+  digitalWrite(powerIndPin, HIGH);
+  Serial.begin(9600);                         
+  bme.begin();  
+  lcd.init();
+  lcd.clear();
+  lcd.backlight();
+}
+
+
 void loop() {
   int photo = analogRead(photoresPin);
   controlBacklight(photo);
   int temp = bme.readTemperature();
   int baro = bme.readPressure() * 0.00750062;
-  int wet = bme.readHumidity();
-  display(temp, baro, wet);
+  display(temp, baro);
   delay(5000);
 }
 
