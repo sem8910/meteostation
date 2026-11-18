@@ -3,6 +3,8 @@
 #include <I2C_LiquidCrystal_RUS.h>
 #include <Wire.h>
 #include <RTClib.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
 
 I2C_LiquidCrystal_RUS lcd(0x27, 16, 2, 2); 
 GyverBME280 bme;
@@ -16,8 +18,11 @@ const int powerIndPin = 0;
 const int tempIndPin = 15;
 const int baroIndPin = 12;
 const int photoresPin = A0;
+const char* ap_ssid = "Wemos_AP";
+const char* ap_password = "password123";
 bool menuState = HIGH;
 
+ESP8266WebServer server(80);
 
 
 void controlBacklight(int photoValue) {
@@ -25,6 +30,44 @@ void controlBacklight(int photoValue) {
   bright = constrain(bright, 20, 255);
   analogWrite(backlightPin, bright);
 }
+
+void handleRoot() {
+  int t = bme.readTemperature() - 3;
+  int p = bme.readPressure() * 0.00750062;
+  
+  DateTime now = rtc.now();
+String timeStr = "";
+if (now.hour() < 10) timeStr += "0";
+timeStr += String(now.hour()) + ":";
+if (now.minute() < 10) timeStr += "0";
+timeStr += String(now.minute()) + ":";
+if (now.second() < 10) timeStr += "0";
+timeStr += String(now.second());
+  String html = "<!DOCTYPE html><html lang='ru'><head><meta charset='utf-8'>";
+  html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
+  html += "<meta http-equiv='refresh' content='5'>";
+  html += "<title>Моя метеостанция</title>";
+  html += "<style>";
+  html += "* { box-sizing: border-box; margin: 0; padding: 0; }";
+  html += "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #121212; color: #ffffff; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }";
+  html += "h1 { font-size: 24px; font-weight: 600; margin: 15px 0 25px; text-align: center; color: #e0e0e0; }";
+  html += ".container { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; }";
+  html += ".card { background: #1e1e1e; border-radius: 16px; padding: 24px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }";
+  html += ".label { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #9e9e9e; margin-bottom: 8px; }";
+  html += ".value { font-size: 48px; font-weight: 700; color: #4fc3f7; }";
+  html += ".unit { font-size: 22px; font-weight: 400; color: #b0bec5; }";
+  html += ".footer { margin-top: 24px; font-size: 14px; color: #757575; }";
+  html += "</style></head><body>";
+  html += "<h1>Моя метеостанция</h1>";
+  html += "<div class='container'>";
+  html += "<div class='card'><div class='label'>Температура</div><div class='value'>" + String(t) + "<span class='unit'> °C</span></div></div>";
+  html += "<div class='card'><div class='label'>Давление</div><div class='value'>" + String(p) + "<span class='unit'> мм рт. ст.</span></div></div>";
+  html += "</div>";
+  html += "<div class='footer'>Время станции: " + timeStr + "</div>";
+  html += "</body></html>";
+  server.send(200, "text/html", html);
+}
+
 
 void display(int temp, int baro) {
   lcd.setCursor(0, 0);
@@ -71,7 +114,10 @@ void setup() {
   pinMode(tempIndPin, OUTPUT);
   pinMode(baroIndPin, OUTPUT);
   digitalWrite(powerIndPin, HIGH);
-  Serial.begin(9600);                         
+  WiFi.softAP(ap_ssid, ap_password);
+  Serial.println(WiFi.softAPIP());
+  server.on("/", handleRoot);
+  server.begin();                         
   bme.begin();
   rtc.begin();  
   lcd.init();
@@ -98,7 +144,7 @@ void loop() {
   else {
     digitalWrite(baroIndPin, LOW);
   }
-  
+  server.handleClient();
   display(temp, baro);
   displayTime();
   delay(1000);
