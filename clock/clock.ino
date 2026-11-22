@@ -20,7 +20,7 @@ const char* ap_password = "password123";
 bool menuState = HIGH;
 float tempOffset = -3.0;
 int correctionBaro = 14;
-
+int correctionSeconds = 2;
 ESP8266WebServer server(80);
 
 void controlBacklight(int photoValue) {
@@ -49,7 +49,7 @@ void displayTime() {
   if (now.minute() < 10) lcd.print("0");
   lcd.print(String(now.minute()));
   lcd.print(":");
-  if (now.second() < 10) lcd.print("0");
+  if (now.second() + correctionSeconds < 10) lcd.print("0");
   lcd.print(String(now.second()));
 }
 
@@ -58,7 +58,7 @@ void handleRoot() {
   int p = bme.readPressure() * 0.00750062 + 14;
   DateTime now = rtc.now();
   char timeStr[9];
-  sprintf(timeStr, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+  sprintf(timeStr, "%02d:%02d:%02d", now.hour(), now.minute(), now.second() + correctionSeconds);
   String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>";
   html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
   html += "<title>Метеостанция</title>";
@@ -117,7 +117,7 @@ void handleSync() {
     int h = server.arg("h").toInt();
     int min = server.arg("min").toInt();
     int s = server.arg("s").toInt();
-    rtc.adjust(DateTime(y, m, d, h, min, s));
+    rtc.adjust(DateTime(y, m, d, h, min, s + correctionSeconds));
     server.send(200, "text/plain", "OK");
   } else {
     server.send(400, "text/plain", "Error");
