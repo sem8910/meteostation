@@ -1,5 +1,6 @@
-#include <GyverBME280.h>
 #define _LCD_TYPE 1
+
+#include <GyverBME280.h>
 #include <I2C_LiquidCrystal_RUS.h>
 #include <Wire.h>
 #include <RTClib.h>
@@ -11,19 +12,16 @@ GyverBME280 bme;
 RTC_DS3231 rtc;
 
 const int backlightPin = 2; 
-const int menuButtonPin = 16;
-const int hoursButtonPin = 13;
-const int minutesButtonPin = 14;
+const int relayPin = 14;
 const int powerIndPin = 0;
-const int tempIndPin = 15;
-const int baroIndPin = 12;
 const int photoresPin = A0;
 const char* ap_ssid = "Wemos_AP";
 const char* ap_password = "password123";
 bool menuState = HIGH;
+float tempOffset = -3.0;
+int correctionBaro = 14;
 
 ESP8266WebServer server(80);
-
 
 void controlBacklight(int photoValue) {
   int bright = map(photoValue, 650, 1023, 255, 20);
@@ -31,63 +29,15 @@ void controlBacklight(int photoValue) {
   analogWrite(backlightPin, bright);
 }
 
-void handleRoot() {
-  int t = bme.readTemperature() - 3;
-  int p = bme.readPressure() * 0.00750062;
-  
-  DateTime now = rtc.now();
-String timeStr = "";
-if (now.hour() < 10) timeStr += "0";
-timeStr += String(now.hour()) + ":";
-if (now.minute() < 10) timeStr += "0";
-timeStr += String(now.minute()) + ":";
-if (now.second() < 10) timeStr += "0";
-timeStr += String(now.second());
-  String html = "<!DOCTYPE html><html lang='ru'><head><meta charset='utf-8'>";
-  html += "<meta name='viewport' content='width=device-width, initial-scale=1.0'>";
-  html += "<meta http-equiv='refresh' content='5'>";
-  html += "<title>Моя метеостанция</title>";
-  html += "<style>";
-  html += "* { box-sizing: border-box; margin: 0; padding: 0; }";
-  html += "body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #121212; color: #ffffff; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 20px; }";
-  html += "h1 { font-size: 24px; font-weight: 600; margin: 15px 0 25px; text-align: center; color: #e0e0e0; }";
-  html += ".container { width: 100%; max-width: 400px; display: flex; flex-direction: column; gap: 16px; }";
-  html += ".card { background: #1e1e1e; border-radius: 16px; padding: 24px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4); }";
-  html += ".label { font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #9e9e9e; margin-bottom: 8px; }";
-  html += ".value { font-size: 48px; font-weight: 700; color: #4fc3f7; }";
-  html += ".unit { font-size: 22px; font-weight: 400; color: #b0bec5; }";
-  html += ".footer { margin-top: 24px; font-size: 14px; color: #757575; }";
-  html += "</style></head><body>";
-  html += "<h1>Моя метеостанция</h1>";
-  html += "<div class='container'>";
-  html += "<div class='card'><div class='label'>Температура</div><div class='value'>" + String(t) + "<span class='unit'> °C</span></div></div>";
-  html += "<div class='card'><div class='label'>Давление</div><div class='value'>" + String(p) + "<span class='unit'> мм рт. ст.</span></div></div>";
-  html += "</div>";
-  html += "<div class='footer'>Время станции: " + timeStr + "</div>";
-  html += "</body></html>";
-  server.send(200, "text/html", html);
-}
-
-
-void display(int temp, int baro) {
-  lcd.setCursor(0, 0);
-  for (int i = 0; i < 16; i++) {
-    lcd.print(" ");
-  }
-
-  lcd.setCursor(0, 1);
-  for (int i = 0; i < 16; i++) {
-  lcd.print(" ");
-  }
-
+void display(int temp, int baro, int hud) {
   lcd.setCursor(0, 0);
   lcd.print("t: ");
   lcd.print(String(temp));
-  lcd.write(0xDF);
-  lcd.print("C ");
-  lcd.print("P: ");
+  lcd.write(223);
+  lcd.print("C");
+  lcd.print(" P: ");
   lcd.print(String(baro));
-  lcd.print("mm");
+  lcd.print("mm      ");
 }
 
 void displayTime() {
@@ -101,52 +51,106 @@ void displayTime() {
   lcd.print(":");
   if (now.second() < 10) lcd.print("0");
   lcd.print(String(now.second()));
+}
 
+void handleRoot() {
+  int t = bme.readTemperature() + tempOffset;
+  int p = bme.readPressure() * 0.00750062 + 14;
+  DateTime now = rtc.now();
+  char timeStr[9];
+  sprintf(timeStr, "%02d:%02d:%02d", now.hour(), now.minute(), now.second());
+  String html = "<!DOCTYPE html><html><head><meta charset='utf-8'>";
+  html += "<meta name='viewport' content='width=device-width, initial-scale=1'>";
+  html += "<title>Метеостанция</title>";
+  html += "<style>";
+  html += "body { font-family: Arial, sans-serif; margin: 20px; }";
+  html += "input { width: 80px; padding: 5px; }";
+  html += "button { padding: 5px 10px; }";
+  html += "</style></head><body>";
+  html += "<h2>Метеостанция</h2>";
+  html += "<p>Температура: <b>" + String(t) + " &deg;C</b></p>";
+  html += "<p>Давление: <b>" + String(p) + " мм рт. ст.</b></p>";
+  html += "<p>Время до синхронизации: " + String(timeStr) + "</p>";
+  html += "<p id='syncStatus' style='color: #888; font-weight: bold;'>Синхронизация времени...</p>";
+  html += "<hr>";
+  html += "<form action='/save' method='POST'>";
+  html += "Поправка температуры: <input type='number' step='0.1' name='offset' value='" + String(tempOffset, 1) + "'> ";
+  html += "<button type='submit'>ОК</button>";
+  html += "</form>";
+  html += "<script>";
+  html += "window.onload = function() {";
+  html += "  let d = new Date();";
+  html += "  let url = `/sync?y=${d.getFullYear()}&m=${d.getMonth()+1}&d=${d.getDate()}&h=${d.getHours()}&min=${d.getMinutes()}&s=${d.getSeconds()}`;";
+  html += "  let st = document.getElementById('syncStatus');";
+  html += "  fetch(url).then(r => {";
+  html += "    if (r.ok) {";
+  html += "      st.innerText = 'Время синхронизировано (' + d.toLocaleTimeString() + ')';";
+  html += "      st.style.color = 'green';";
+  html += "    } else {";
+  html += "      st.innerText = 'Ошибка синхронизации';";
+  html += "      st.style.color = 'red';";
+  html += "    }";
+  html += "  }).catch(() => {";
+  html += "    st.innerText = 'Нет связи с платой';";
+  html += "    st.style.color = 'red';";
+  html += "  });";
+  html += "};";
+  html += "</script>";
+  html += "</body></html>";
+  server.send(200, "text/html", html);
+}
+
+void handleSave() {
+  if (server.hasArg("offset")) {
+    tempOffset = server.arg("offset").toFloat();
+  }
+  server.sendHeader("Location", "/");
+  server.send(303);
+}
+
+void handleSync() {
+  if (server.hasArg("y") && server.hasArg("m") && server.hasArg("d") &&
+      server.hasArg("h") && server.hasArg("min") && server.hasArg("s")) {
+    int y = server.arg("y").toInt();
+    int m = server.arg("m").toInt();
+    int d = server.arg("d").toInt();
+    int h = server.arg("h").toInt();
+    int min = server.arg("min").toInt();
+    int s = server.arg("s").toInt();
+    rtc.adjust(DateTime(y, m, d, h, min, s));
+    server.send(200, "text/plain", "OK");
+  } else {
+    server.send(400, "text/plain", "Error");
+  }
 }
 
 void setup() {
   Wire.begin();
   pinMode(backlightPin, OUTPUT);
-  pinMode(menuButtonPin, INPUT_PULLUP);
-  pinMode(hoursButtonPin, INPUT_PULLUP);
-  pinMode(minutesButtonPin, INPUT_PULLUP);
   pinMode(powerIndPin, OUTPUT);
-  pinMode(tempIndPin, OUTPUT);
-  pinMode(baroIndPin, OUTPUT);
   digitalWrite(powerIndPin, HIGH);
+  digitalWrite(relayPin, HIGH);
   WiFi.softAP(ap_ssid, ap_password);
+  Serial.begin(9600);
   Serial.println(WiFi.softAPIP());
   server.on("/", handleRoot);
-  server.begin();                         
+  server.on("/save", HTTP_POST, handleSave);
+  server.on("/sync", handleSync);
+  server.begin();
   bme.begin();
-  rtc.begin();  
+  rtc.begin();
   lcd.init();
   lcd.clear();
   lcd.backlight();
 }
 
-
 void loop() {
   int photo = analogRead(photoresPin);
   controlBacklight(photo);
-  int temp = bme.readTemperature() - 3;
-  int baro = bme.readPressure() * 0.00750062;
-
-  if (temp > 25 || temp < 20) {
-    digitalWrite(tempIndPin, HIGH);
-  }
-  else {
-    digitalWrite(tempIndPin, LOW);
-  }
-  if (baro < 735 || baro > 755) {
-    digitalWrite(baroIndPin, HIGH);
-  }
-  else {
-    digitalWrite(baroIndPin, LOW);
-  }
+  int temp = bme.readTemperature() + tempOffset;
+  int baro = bme.readPressure() * 0.00750062 + correctionBaro;
   server.handleClient();
-  display(temp, baro);
+  display(temp, baro, 1);
   displayTime();
   delay(1000);
 }
- 
