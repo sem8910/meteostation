@@ -1,9 +1,11 @@
 #define _LCD_TYPE 1
 
+
 #include <GyverBME280.h>
 #include <I2C_LiquidCrystal_RUS.h>
 #include <Wire.h>
 #include <RTClib.h>
+#include <DHT.h>  
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 
@@ -11,13 +13,16 @@ I2C_LiquidCrystal_RUS lcd(0x27, 16, 2, 2);
 GyverBME280 bme;
 RTC_DS3231 rtc;
 
+#define DHTPIN 12
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+
 const int backlightPin = 2; 
 const int relayPin = 14;
 const int powerIndPin = 0;
 const int photoresPin = A0;
-const char* ap_ssid = "Wemos_AP";
-const char* ap_password = "password123";
-bool menuState = HIGH;
+const char* ap_ssid = "meteostation";
+const char* ap_password = "1234567890";
 float tempOffset = -3.0;
 int correctionBaro = 14;
 int correctionSeconds = 2;
@@ -29,6 +34,17 @@ void controlBacklight(int photoValue) {
   analogWrite(backlightPin, bright);
 }
 
+void controlHud(int hud) {
+  if (hud < 40) {
+    digitalWrite(relayPin, LOW);
+    Serial.println("Вкл");
+  }
+  else if (hud >= 52) {
+      digitalWrite(relayPin, HIGH);
+      Serial.print("выкл");
+  }
+}
+
 void display(int temp, int baro, int hud) {
   lcd.setCursor(0, 0);
   lcd.print("t: ");
@@ -38,6 +54,10 @@ void display(int temp, int baro, int hud) {
   lcd.print(" P: ");
   lcd.print(String(baro));
   lcd.print("mm      ");
+  lcd.setCursor(10, 1);
+  lcd.print("h: ");
+  lcd.print(String(hud));
+  lcd.print("%      ");
 }
 
 void displayTime() {
@@ -50,7 +70,7 @@ void displayTime() {
   lcd.print(String(now.minute()));
   lcd.print(":");
   if (now.second() + correctionSeconds < 10) lcd.print("0");
-  lcd.print(String(now.second()));
+  lcd.print(String(now.second()) + " ");
 }
 
 void handleRoot() {
@@ -128,6 +148,7 @@ void setup() {
   Wire.begin();
   pinMode(backlightPin, OUTPUT);
   pinMode(powerIndPin, OUTPUT);
+  pinMode(relayPin, OUTPUT);
   digitalWrite(powerIndPin, HIGH);
   digitalWrite(relayPin, HIGH);
   WiFi.softAP(ap_ssid, ap_password);
@@ -138,6 +159,7 @@ void setup() {
   server.on("/sync", handleSync);
   server.begin();
   bme.begin();
+  dht.begin();
   rtc.begin();
   lcd.init();
   lcd.clear();
@@ -147,10 +169,12 @@ void setup() {
 void loop() {
   int photo = analogRead(photoresPin);
   controlBacklight(photo);
-  int temp = bme.readTemperature() + tempOffset;
+  int temp = dht.readTemperature() + tempOffset;
   int baro = bme.readPressure() * 0.00750062 + correctionBaro;
+  int hud = dht.readHumidity();
   server.handleClient();
-  display(temp, baro, 1);
+  display(temp, baro, hud);
   displayTime();
+  controlHud(hud);
   delay(1000);
 }
